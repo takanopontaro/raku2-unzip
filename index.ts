@@ -5,51 +5,51 @@ import { Transform } from 'stream';
 import { promisify } from 'util';
 import yauzl, { Entry } from 'yauzl';
 
-// @types/node@8.x.x appears a little wrong
-export type Transform2 = Transform & {
-  _flush(callback: Function): void;
-};
-
-export type TInfo = {
+export type ProgressData = {
   path: string;
-  totalCount: number;
-  doneCount: number;
-  byte: number;
-  totalBytes: number;
+  totalItems: number;
+  completedItems: number;
+  totalSize: number;
+  completedSize: number;
   done: boolean;
 };
 
-export type TCallback = (info: TInfo) => void;
+export type ProgressCallback = (data: ProgressData) => void;
+
+// @types/node@8.x.x appears a little wrong
+type Transform2 = Transform & {
+  _flush(callback: Function): void;
+};
 
 // for promisify yauzl.open
-export type TYauzlOpen = {
+type TYauzlOpen = {
   (path: string, options: yauzl.Options): yauzl.ZipFile;
 };
 
 const yauzlOpen: TYauzlOpen = promisify(yauzl.open) as any;
 
-function unzip(path: string, dest: string, cb?: TCallback) {
-  return new Promise<TInfo>(async resolve => {
-    const zip = await yauzlOpen(path, { lazyEntries: true });
-    const outputDir = ndPath.parse(path).name;
+function unzip(src: string, dest: string, cb?: ProgressCallback) {
+  return new Promise<ProgressData>(async resolve => {
+    const zip = await yauzlOpen(src, { lazyEntries: true });
+    const outputDir = ndPath.parse(src).name;
 
     let done = 0;
 
     zip.on('entry', async (entry: Entry) => {
       const path = ndPath.join(dest, outputDir, entry.fileName);
-      const info: TInfo = {
+      const data: ProgressData = {
         path,
-        totalCount: zip.entryCount,
-        doneCount: done,
-        byte: 0,
-        totalBytes: entry.uncompressedSize,
+        totalItems: zip.entryCount,
+        completedItems: done,
+        totalSize: entry.uncompressedSize,
+        completedSize: 0,
         done: false
       };
 
-      if (path.endsWith('/')) {
+      if (path.endsWith(ndPath.sep)) {
         await makeDir(path);
         done += 1;
-        info.doneCount = done;
+        data.completedItems = done;
         zip.readEntry();
         return;
       }
@@ -64,18 +64,18 @@ function unzip(path: string, dest: string, cb?: TCallback) {
 
         writeStream.on('close', () => {
           done += 1;
-          info.doneCount = done;
-          info.done = true;
+          data.completedItems = done;
+          data.done = true;
           if (done === zip.entryCount) {
-            cb && cb(info);
-            resolve(info);
+            if (cb) cb(data);
+            resolve(data);
           }
         });
 
         filter._transform = (chunk, encoding, callback) => {
-          info.byte += chunk.length;
+          data.completedSize += chunk.length;
           callback(undefined, chunk);
-          cb && cb(info);
+          if (cb) cb(data);
         };
 
         filter._flush = callback => {
@@ -91,7 +91,12 @@ function unzip(path: string, dest: string, cb?: TCallback) {
   });
 }
 
-export default (paths: string[], dest: string, cb?: TCallback) => {
+module.exports = (
+  src: string | string[],
+  dest: string,
+  cb?: ProgressCallback
+) => {
+  const paths = src instanceof Array ? src : [src];
   const promises = paths.map(path => unzip(path, dest, cb));
   return Promise.all(promises);
 };
