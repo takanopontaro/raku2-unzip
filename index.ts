@@ -5,16 +5,7 @@ import { Transform } from 'stream';
 import { promisify } from 'util';
 import yauzl, { Entry } from 'yauzl';
 
-export type ProgressData = {
-  path: string;
-  totalItems: number;
-  completedItems: number;
-  totalSize: number;
-  completedSize: number;
-  done: boolean;
-};
-
-export type ProgressCallback = (data: ProgressData) => void;
+import { ProgressCallback, ProgressData } from './index.d';
 
 // @types/node@8.x.x appears a little wrong
 type Transform2 = Transform & {
@@ -91,12 +82,13 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
   });
 }
 
-module.exports = (
+module.exports = async (
   src: string | string[],
   dest: string,
   cb?: ProgressCallback
 ) => {
   const paths = src instanceof Array ? src : [src];
   const promises = paths.map(path => unzip(path, dest, cb));
-  return Promise.all(promises);
+  const data = await Promise.all(promises);
+  return src instanceof Array ? data : data[0];
 };
