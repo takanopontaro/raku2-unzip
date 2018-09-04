@@ -1,6 +1,6 @@
 {
   "name": "raku2-unzip",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "",
   "main": "index.js",
   "types": "index.d.ts",
@@ -17,6 +17,7 @@
   "author": "takanopontaro",
   "license": "MIT",
   "devDependencies": {
+    "@types/globby": "^8.0.0",
     "@types/make-dir": "^1.0.3",
     "@types/node": "^8.10.28",
     "@types/yauzl": "^2.9.0",
@@ -28,6 +29,7 @@
     "typescript": "^3.0.1"
   },
   "dependencies": {
+    "globby": "^8.0.1",
     "make-dir": "^1.3.0",
     "yauzl": "^2.10.0"
   }

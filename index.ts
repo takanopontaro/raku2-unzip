@@ -1,11 +1,12 @@
 import fs from 'fs';
+import globby from 'globby';
 import makeDir from 'make-dir';
 import ndPath from 'path';
 import { Transform } from 'stream';
 import { promisify } from 'util';
 import yauzl, { Entry } from 'yauzl';
 
-import { ProgressCallback, ProgressData } from './index.d';
+import { Options, ProgressCallback, ProgressData } from './index.d';
 
 // @types/node@8.x.x appears a little wrong
 type Transform2 = Transform & {
@@ -85,9 +86,10 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
 module.exports = async (
   src: string | string[],
   dest: string,
+  options?: Options | null,
   cb?: ProgressCallback
 ) => {
-  const paths = src instanceof Array ? src : [src];
+  const paths = await globby(src, { ...options });
   const promises = paths.map(path => unzip(path, dest, cb));
   const data = await Promise.all(promises);
   return src instanceof Array ? data : data[0];
