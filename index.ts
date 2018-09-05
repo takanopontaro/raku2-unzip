@@ -89,8 +89,10 @@ module.exports = async (
   options?: Options | null,
   cb?: ProgressCallback
 ) => {
+  const resolve = (path: string) =>
+    options && options.cwd ? ndPath.resolve(options.cwd, path) : path;
   const paths = await globby(src, { ...options });
-  const promises = paths.map(path => unzip(path, dest, cb));
+  const promises = paths.map(path => unzip(resolve(path), resolve(dest), cb));
   const data = await Promise.all(promises);
   return src instanceof Array ? data : data[0];
 };
