@@ -1,34 +1,35 @@
 import fs from 'fs';
-import globby from 'globby';
 import makeDir from 'make-dir';
 import ndPath from 'path';
 import { Transform } from 'stream';
 import { promisify } from 'util';
 import yauzl, { Entry } from 'yauzl';
 
-import { Options, ProgressCallback, ProgressData } from './index.d';
+import { ProgressCallback, ProgressData } from '../index.d';
 
 // @types/node@8.x.x appears a little wrong
-type Transform2 = Transform & {
+interface ITransform extends Transform {
   _flush(callback: Function): void;
-};
+}
 
 // for promisify yauzl.open
-type TYauzlOpen = {
+interface IYauzlOpen {
   (path: string, options: yauzl.Options): yauzl.ZipFile;
-};
+}
 
-const yauzlOpen: TYauzlOpen = promisify(yauzl.open) as any;
+const yauzlOpen: IYauzlOpen = promisify(yauzl.open) as any;
 
-function unzip(src: string, dest: string, cb?: ProgressCallback) {
+export function extract(src: string, dest: string, cb?: ProgressCallback) {
   return new Promise<ProgressData>(async resolve => {
-    const zip = await yauzlOpen(src, { lazyEntries: true });
-    const outputDir = ndPath.parse(src).name;
+    const zip = await yauzlOpen(src, {
+      lazyEntries: true,
+      decodeStrings: false
+    });
 
     let done = 0;
 
     zip.on('entry', async (entry: Entry) => {
-      const path = ndPath.join(dest, outputDir, entry.fileName);
+      const path = ndPath.join(dest, entry.fileName.toString());
       const data: ProgressData = {
         path,
         totalItems: zip.entryCount,
@@ -49,9 +50,11 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
       await makeDir(ndPath.dirname(path));
 
       zip.openReadStream(entry, (err, readStream) => {
-        if (err || !readStream) throw err;
+        if (err || !readStream) {
+          throw err;
+        }
 
-        const filter = new Transform() as Transform2;
+        const filter = new Transform() as ITransform;
         const writeStream = fs.createWriteStream(path);
 
         writeStream.on('close', () => {
@@ -59,7 +62,9 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
           data.completedItems = done;
           data.done = true;
           if (done === zip.entryCount) {
-            if (cb) cb(data);
+            if (cb) {
+              cb(data);
+            }
             resolve(data);
           }
         });
@@ -67,7 +72,9 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
         filter._transform = (chunk, encoding, callback) => {
           data.completedSize += chunk.length;
           callback(undefined, chunk);
-          if (cb) cb(data);
+          if (cb) {
+            cb(data);
+          }
         };
 
         filter._flush = callback => {
@@ -82,17 +89,3 @@ function unzip(src: string, dest: string, cb?: ProgressCallback) {
     zip.readEntry();
   });
 }
-
-module.exports = async (
-  src: string | string[],
-  dest: string,
-  options?: Options | null,
-  cb?: ProgressCallback
-) => {
-  const resolve = (path: string) =>
-    options && options.cwd ? ndPath.resolve(options.cwd, path) : path;
-  const paths = await globby(src, { ...options });
-  const promises = paths.map(path => unzip(resolve(path), resolve(dest), cb));
-  const data = await Promise.all(promises);
-  return src instanceof Array ? data : data[0];
-};
